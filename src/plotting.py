@@ -1,21 +1,19 @@
 import os
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import xarray as xr
-
-SAVE_DIR = "output_figures"
+import cartopy.feature as cfeature
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
 
 def plot_trend_with_region(trend, var_name: str, time_info, var_units="Unknown", start_year=None, end_year=None, cmap="coolwarm"):
-    """Plot the linear trend of climate data with variable units and time range."""
+    """Plot the linear trend of climate data with proper land and ocean representation."""
     print(f"🖼️ Creating plot for {var_name} trend...")
-    
+
     time_start, time_end, time_units = time_info
     print(f"📆 Time Info: Start = {time_start}, End = {time_end}, Units = {time_units}")
 
     fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
 
-    # ✅ Debugging: Print dataset details before plotting
+    # ✅ Debugging dataset structure
     print("📊 DEBUG: NetCDF Dataset Structure Before Plotting:")
     print(trend)
     print(f"📏 Dataset Dimensions: {trend.dims}")
@@ -38,15 +36,23 @@ def plot_trend_with_region(trend, var_name: str, time_info, var_units="Unknown",
         trend = trend.isel(ensemble=0)  # Selects first ensemble member
         print(f"✅ Updated shape after selecting ensemble member: {trend.shape}")
 
-    # ✅ Use pcolormesh for gridded data
-    img = ax.pcolormesh(trend.lon, trend.lat, trend, transform=ccrs.PlateCarree(), cmap=cmap)
-    cbar = plt.colorbar(img, ax=ax, orientation="vertical", label=f"{var_name} Trend ({var_units})")
+    # ✅ Handle NaN values
+    print("🔍 Checking for NaN values in trend data...")
+    missing_values = trend.isnull().sum().item()
+    print(f"📉 Missing values found: {missing_values}")
 
-    # ✅ Add geographic features
+    trend = trend.fillna(0)  # Replace NaNs with 0
+    print("✅ Replaced NaN values with 0.")
+
+    # ✅ Add land first to prevent ocean from masking it
+    ax.add_feature(cfeature.LAND, facecolor="none", edgecolor="black")  # Draw land outlines
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
-    ax.add_feature(cfeature.LAND, facecolor="lightgray")
-    ax.add_feature(cfeature.OCEAN, facecolor="lightblue")
+    ax.add_feature(cfeature.OCEAN, facecolor="lightblue")  # Keep ocean blue
+
+    # ✅ Use pcolormesh for gridded data
+    img = ax.pcolormesh(trend.lon, trend.lat, trend, transform=ccrs.PlateCarree(), cmap=cmap, shading="auto")
+    cbar = plt.colorbar(img, ax=ax, orientation="vertical", label=f"{var_name} Trend ({var_units})")
 
     # ✅ Add regional analysis box (example coordinates)
     region_box = [(-30, 90), (-30, 270), (30, 270), (30, 90), (-30, 90)]
@@ -69,7 +75,7 @@ def plot_trend_with_region(trend, var_name: str, time_info, var_units="Unknown",
 
     return fig
 
-def save_figure(fig, var_name: str, dataset_name: str, file_type: str, file_format: "png"):
+def save_figure(fig, var_name: str, dataset_name: str, file_type: str, file_format: str = "png"):
     """Save the generated climate visualization."""
     os.makedirs(SAVE_DIR, exist_ok=True)
     file_name = f"{var_name}_{dataset_name}_{file_type}.{file_format}"

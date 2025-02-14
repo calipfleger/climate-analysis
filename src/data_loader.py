@@ -8,6 +8,9 @@ def load_netcdf(file_path: str):
         ds = xr.open_dataset(file_path)
         print(f"✅ Successfully loaded dataset: {file_path}")
         print(f"📊 Available variables: {list(ds.data_vars.keys())}\n")
+        print(f"📏 Dataset Dimensions: {ds.dims}")
+        print(f"📊 Dataset Attributes: {ds.attrs}\n")
+
         return ds
     except Exception as e:
         print(f"❌ Error loading file: {e}\n")
