@@ -1,0 +1,8 @@
+data/*
+!data/*.nc  # Allow NetCDF files but ignore everything else in "data/"
+data/
+output_figures/
+notebooks/.ipynb_checkpoints/
+.DS_Store
+__pycache__/
+

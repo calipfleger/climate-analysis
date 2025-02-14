@@ -1,0 +1,24 @@
+# General settings
+data_directory: "data"
+output_directory: "output_figures"
+
+# Variables to analyze
+variables:
+  - "temperature"
+  - "precipitation"
+
+# Climate models or experiments
+datasets:
+  - "cesmlme_PRECTvolc.nc"
+
+# Regional bounds for analysis
+region:
+  lat_min: -10
+  lat_max: 10
+  lon_min: 120
+  lon_max: 150
+
+# Colormap settings
+colormap: "coolwarm"
+
+
