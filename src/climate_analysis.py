@@ -1,203 +1,76 @@
 """
 climate_analysis.py
 
-A fully modular and reproducible NetCDF climate data processing & visualization tool.
-
-Features:
-- Automatically detects time format and units
-- Fully configurable for comparing any climate datasets (RCPs, SSPs, CMIP models, observations)
-- Automatic logging of execution time
-- Ensemble averaging across members
-- Regional time series analysis
-- Linear trend mapping with 95% confidence intervals
-- Regional analysis area highlighted on trend maps
-- High-quality, reproducible visualization with figure captions
+A modular script for analyzing climate model data from NetCDF files.
 
 Author: [Your Name]
-License: MIT
 Last Updated: [Date]
 """
 
 import os
-import datetime
-import numpy as np
-import xarray as xr
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import scipy.stats as stats
+from data_loader import load_netcdf, detect_time_format
+from trend_analysis import compute_linear_trend, convert_time_to_numeric
+from plotting import plot_trend_with_region, save_figure
 
-# ====== CONFIGURATION SETTINGS ======
-DATA_DIR = "data"  # Directory containing NetCDF files
-SAVE_DIR = "output_figures"  # Directory to save figures
-FILE_FORMAT = "png"  # Image format: png, jpg, svg, etc.
-VARIABLES = ["temperature", "precipitation"]  # Variables to analyze
-SCENARIOS = ["Model_A", "Model_B", "Model_C"]  # Different datasets to compare
-REGION_BOUNDS = {"lat_min": -10, "lat_max": 10, "lon_min": 120, "lon_max": 150}  # Region for averaging
-DEFAULT_CMAP = "coolwarm"  # Default colormap for visualizations
+print("🚀 climate_analysis.py is running!")
 
-# ====== LOGGING TIME OF EXECUTION ======
-print(f"📅 Script started at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-# ====== FUNCTION DEFINITIONS ======
-
-def load_netcdf(file_path: str):
-    """Load a NetCDF dataset using xarray."""
-    try:
-        ds = xr.open_dataset(file_path)
-        print(f"✅ Successfully loaded {file_path}")
-        print(ds)  # Print metadata for verification
-        return ds
-    except Exception as e:
-        print(f"❌ Error loading file: {e}")
-        return None
-
-def detect_time_format(ds):
-    """Detect the format of the time dimension in a dataset."""
-    if "time" not in ds:
-        print("⚠️ No time dimension found!")
-        return None
-
-    time_dim = ds["time"]
-    
-    # Extract time units
-    time_units = time_dim.attrs.get("units", "Unknown")
-    
-    # Convert time to a readable format
-    time_start = np.datetime_as_string(time_dim.min().values, unit="D")
-    time_end = np.datetime_as_string(time_dim.max().values, unit="D")
-
-    print(f"📆 Time detected: {time_start} to {time_end} ({time_units})")
-    return time_start, time_end, time_units
-
-def process_ensemble(ds, var_name: str):
-    """Average all ensemble members, if available."""
-    if "member" in ds.dims:
-        ensemble_mean = ds[var_name].mean(dim="member")
-        print(f"✅ Averaged over ensemble members for: {var_name}")
-    else:
-        ensemble_mean = ds[var_name]
-        print(f"⚠️ No ensemble members found, using raw data.")
-    
-    return ensemble_mean
-
-def compute_regional_timeseries(ds, var_name: str):
-    """Compute a regional mean time series."""
-    regional_ds = ds.sel(
-        lat=slice(REGION_BOUNDS["lat_min"], REGION_BOUNDS["lat_max"]),
-        lon=slice(REGION_BOUNDS["lon_min"], REGION_BOUNDS["lon_max"])
-    )
-    
-    regional_mean = regional_ds[var_name].mean(dim=["lat", "lon"])
-    print(f"✅ Computed regional mean time series for {var_name}")
-    
-    return regional_mean
-
-def compute_linear_trend(ds, var_name: str):
-    """Compute a linear trend and 95% confidence interval for a dataset."""
-    time_values = ds["time"].values.astype(float)
-    var_data = ds[var_name]
-
-    slope = xr.apply_ufunc(
-        lambda y: stats.linregress(time_values, y)[0], 
-        var_data, 
-        input_core_dims=[["time"]],
-        vectorize=True
-    )
-
-    print(f"✅ Computed linear trend for {var_name}")
-    return slope
-
-def plot_trend_with_region(trend, var_name: str, time_info, cmap: str = "RdBu_r"):
-    """Plot the linear trend with the regional analysis box overlayed."""
-    time_start, time_end, time_units = time_info
-
-    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()})
-    trend.plot(ax=ax, transform=ccrs.PlateCarree(), cmap=cmap, cbar_kwargs={'label': f"{var_name} Trend"})
-
-    ax.coastlines()
-    ax.add_feature(cfeature.BORDERS, linestyle=":")
-    ax.add_feature(cfeature.LAND, facecolor="lightgray")
-    ax.add_feature(cfeature.OCEAN, facecolor="lightblue")
-
-    # Draw the regional analysis box
-    ax.plot(
-        [REGION_BOUNDS["lon_min"], REGION_BOUNDS["lon_max"], REGION_BOUNDS["lon_max"], REGION_BOUNDS["lon_min"], REGION_BOUNDS["lon_min"]],
-        [REGION_BOUNDS["lat_min"], REGION_BOUNDS["lat_min"], REGION_BOUNDS["lat_max"], REGION_BOUNDS["lat_max"], REGION_BOUNDS["lat_min"]],
-        color="red", linewidth=2, linestyle="--", transform=ccrs.PlateCarree(), label="Regional Avg Box"
-    )
-    ax.legend(loc="upper right")
-
-    # Generate dynamic caption
-    caption = f"{var_name} Linear Trend ({time_start} to {time_end}, {time_units}).\nRed box shows the regional average area."
-    plt.figtext(0.5, -0.05, caption, wrap=True, horizontalalignment='center', fontsize=10)
-
-    plt.title(f"Linear Trend of {var_name} with Regional Box")
-    return fig
-
-def save_figure(fig, var_name: str, dataset_name: str, file_type: str, save_dir: str = SAVE_DIR, file_format: str = FILE_FORMAT):
-    """Save the generated plot as an image file."""
-    os.makedirs(save_dir, exist_ok=True)
-    file_name = f"{var_name}_{dataset_name}_{file_type}.{file_format}"
-    file_path = os.path.join(save_dir, file_name)
-
-    fig.savefig(file_path, dpi=300, bbox_inches="tight")
-    print(f"📁 Figure saved: {file_path}")
+# ====== CONFIGURATION ======
+DATA_DIR = "data"  
+SCENARIOS = ["cesmlme_PRECTvolc"]  
+SAVE_DIR = "output_figures"
 
 # ====== MAIN EXECUTION ======
-
 if __name__ == "__main__":
-    for variable_name in VARIABLES:
-        for dataset_name in SCENARIOS:
-            file_path = os.path.join(DATA_DIR, f"{dataset_name}.nc")  
+    print("🚀 Starting climate analysis script!")
 
-            dataset = load_netcdf(file_path)
-            if dataset:
-                time_info = detect_time_format(dataset)
-                dataset = process_ensemble(dataset, variable_name)
-                regional_ts = compute_regional_timeseries(dataset, variable_name)
-                trend_map = compute_linear_trend(dataset, variable_name)
+    for dataset_name in SCENARIOS:
+        file_path = os.path.join(DATA_DIR, f"{dataset_name}.nc")
+        print(f"📂 Checking file: {file_path}")
 
-                fig_trend = plot_trend_with_region(trend_map, variable_name, time_info)
-                if fig_trend:
-                    save_figure(fig_trend, variable_name, dataset_name, "trend")
+        dataset = load_netcdf(file_path)
+        if dataset:
+            print(f"✅ Dataset loaded: {dataset_name}")
 
-    print(f"✅ All processing complete at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-"""
-climate_analysis.py
+            # Select first available variable
+            variable_name = list(dataset.data_vars.keys())[0]
+            print(f"📊 Using variable: {variable_name}")
 
-A fully modular and reproducible NetCDF climate data processing & visualization tool.
+            # Get variable units
+            var_units = dataset[variable_name].attrs.get("units", "Unknown")
+            print(f"📏 Variable Units: {var_units}")
 
-Author: [Your Name]
-License: MIT
-Last Updated: [Date]
-"""
+            # Convert time
+            numeric_time = convert_time_to_numeric(dataset)
+            if numeric_time is not None:
+                start_year, end_year = numeric_time[0], numeric_time[-1]
+                print(f"📆 Time Range: {start_year:.2f} - {end_year:.2f}")
 
-import os
-import datetime
-import numpy as np
-import xarray as xr
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import scipy.stats as stats
+            # Compute trend
+            trend_map, p_value_map = compute_linear_trend(dataset, variable_name)
+            if trend_map is None:
+                print(f"❌ ERROR: Trend computation failed for {variable_name}!")
+            else:
+                print(f"✅ Trend computed for {variable_name}")
 
-# Configuration Settings
-DATA_DIR = "../data"  # Adjust path as needed
-SAVE_DIR = "../output_figures"
-VARIABLES = ["temperature", "precipitation"]
-SCENARIOS = ["Model_A", "Model_B", "Model_C"]
+            # Detect time format
+            time_info = detect_time_format(dataset)
 
-def load_netcdf(file_path: str):
-    """Load a NetCDF dataset using xarray."""
-    try:
-        ds = xr.open_dataset(file_path)
-        print(f"✅ Loaded {file_path}")
-        return ds
-    except Exception as e:
-        print(f"❌ Error loading file: {e}")
-        return None
+            # Plot trend
+            print(f"🖼️ Plotting trend for {variable_name}...")
+            fig_trend = plot_trend_with_region(
+                trend=trend_map,
+                var_name=variable_name,
+                time_info=time_info,
+                var_units=var_units,
+                start_year=start_year,
+                end_year=end_year
+            )
 
-if __name__ == "__main__":
-    print(f"📅 Script started at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            # Save figure
+            if fig_trend:
+                print("📁 Saving figure...")
+                save_figure(fig_trend, variable_name, dataset_name, "trend", "png")
+                print("✅ Figure saved successfully!")
+            else:
+                print("❌ No figure to save!")
 

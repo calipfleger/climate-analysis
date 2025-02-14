@@ -1,4 +1,5 @@
-# General settings
+datasets:
+  - "cesmlme_PRECTvolc.nc"# General settings
 data_directory: "data"
 output_directory: "output_figures"
 
